@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"fmt"
+	"mangasearch/internal/ocr"
 	"sync"
 	"time"
 
@@ -73,7 +74,12 @@ func (queue *RedisQueue) worker() {
 }
 
 func process(dataPath string) error {
-	fmt.Println("processing:", dataPath)
+	text, err := ocr.GetData(dataPath)
+	if err != nil {
+		fmt.Println("ocr error:", err)
+		return err
+	}
+	fmt.Println(text)
 	return nil
 }
 
@@ -126,4 +132,3 @@ func (queue *RedisQueue) addWorker() {
 	queue.activeWorkers++
 	queue.mu.Unlock()
 }
-
