@@ -3,9 +3,11 @@ package queue
 import (
 	"context"
 	"fmt"
-	"mangasearch/internal/ocr"
 	"sync"
 	"time"
+
+	"mangasearch/internal/db"
+	"mangasearch/internal/search"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -18,21 +20,24 @@ type RedisQueue struct {
 	activeWorkers int
 	queueName     string
 	retries       int
+	db            *db.DB
+	es            *search.Client
 }
 
-func NewRedisQueue(workers int) *RedisQueue {
+func NewRedisQueue(workers int, database *db.DB, esClient *search.Client) *RedisQueue {
 	return &RedisQueue{
 		client: redis.NewClient(&redis.Options{
 			Addr:     "localhost:6379",
 			Password: "",
 			DB:       0,
 		}),
-		ctx:           context.Background(),
-		mu:            &sync.Mutex{},
-		maxWorkers:    workers,
-		activeWorkers: 0,
-		queueName:     "ocr_queue",
-		retries:       3,
+		ctx:        context.Background(),
+		mu:         &sync.Mutex{},
+		maxWorkers: workers,
+		queueName:  "ocr_queue",
+		retries:    3,
+		db:         database,
+		es:         esClient,
 	}
 }
 
@@ -65,33 +70,20 @@ func (queue *RedisQueue) worker() {
 	}
 
 	dataPath := result[1]
-
 	for idx := 0; idx < queue.retries; idx++ {
-		if process(dataPath) == nil {
+		if process(dataPath, queue.db, queue.es) == nil {
 			break
 		}
 	}
 }
 
-func process(dataPath string) error {
-	text, err := ocr.GetData(dataPath)
-	if err != nil {
-		fmt.Println("ocr error:", err)
-		return err
-	}
-	fmt.Println(text)
-	return nil
-}
-
 func (queue *RedisQueue) Start(paths []string) {
-	// phase 1: fill the queue
 	for _, path := range paths {
 		if err := queue.Push(path); err != nil {
 			fmt.Println("push error:", err)
 		}
 	}
 
-	// phase 2: drain the queue - supervisor spawns workers as slots open up
 	for !queue.IsEmpty() {
 		if queue.getActiveWorkers() < queue.getMaxWorkers() {
 			queue.addWorker()
@@ -101,7 +93,6 @@ func (queue *RedisQueue) Start(paths []string) {
 		}
 	}
 
-	// phase 3: wait for last workers to finish their current job
 	for queue.getActiveWorkers() > 0 {
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -115,16 +106,16 @@ func (queue *RedisQueue) getActiveWorkers() int {
 	return queue.activeWorkers
 }
 
-func (queue *RedisQueue) setMaxWorkers(workers int) {
-	queue.mu.Lock()
-	defer queue.mu.Unlock()
-	queue.maxWorkers = workers
-}
-
 func (queue *RedisQueue) getMaxWorkers() int {
 	queue.mu.Lock()
 	defer queue.mu.Unlock()
 	return queue.maxWorkers
+}
+
+func (queue *RedisQueue) setMaxWorkers(workers int) {
+	queue.mu.Lock()
+	defer queue.mu.Unlock()
+	queue.maxWorkers = workers
 }
 
 func (queue *RedisQueue) addWorker() {

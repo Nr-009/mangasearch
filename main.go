@@ -1,37 +1,48 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"log"
+
+	"mangasearch/internal/db"
 	"mangasearch/internal/queue"
+	"mangasearch/internal/search"
 )
 
 func main() {
-	fmt.Println("starting...")
-	q := queue.NewRedisQueue(4)
-	paths := []string{
-    "/Users/naranjitanaranjoso/Downloads/Berzerk/130/0130-001.jpg",
-    "/Users/naranjitanaranjoso/Downloads/Berzerk/130/0130-002.jpg",
-    "/Users/naranjitanaranjoso/Downloads/Berzerk/130/0130-003.jpg",
-    "/Users/naranjitanaranjoso/Downloads/Berzerk/130/0130-004.jpg",
-    "/Users/naranjitanaranjoso/Downloads/Berzerk/130/0130-005.jpg",
-    "/Users/naranjitanaranjoso/Downloads/Berzerk/130/0130-006.jpg",
-    "/Users/naranjitanaranjoso/Downloads/Berzerk/130/0130-007.jpg",
-    "/Users/naranjitanaranjoso/Downloads/Berzerk/130/0130-008.jpg",
-    "/Users/naranjitanaranjoso/Downloads/Berzerk/130/0130-009.jpg",
-    "/Users/naranjitanaranjoso/Downloads/Berzerk/130/0130-010.jpg",
-    "/Users/naranjitanaranjoso/Downloads/Berzerk/130/0130-011.jpg",
-    "/Users/naranjitanaranjoso/Downloads/Berzerk/130/0130-012.jpg",
-    "/Users/naranjitanaranjoso/Downloads/Berzerk/130/0130-013.jpg",
-    "/Users/naranjitanaranjoso/Downloads/Berzerk/130/0130-014.jpg",
-    "/Users/naranjitanaranjoso/Downloads/Berzerk/130/0130-015.jpg",
-    "/Users/naranjitanaranjoso/Downloads/Berzerk/130/0130-016.jpg",
-    "/Users/naranjitanaranjoso/Downloads/Berzerk/130/0130-017.jpg",
-    "/Users/naranjitanaranjoso/Downloads/Berzerk/130/0130-018.jpg",
-    "/Users/naranjitanaranjoso/Downloads/Berzerk/130/0130-019.jpg",
-    "/Users/naranjitanaranjoso/Downloads/Berzerk/130/0130-020.jpg",
-    "/Users/naranjitanaranjoso/Downloads/Berzerk/130/0130-021.jpg",
-    "/Users/naranjitanaranjoso/Downloads/Berzerk/130/0130-022.jpg",
+	ctx := context.Background()
+
+	database, err := db.New("postgres://manga:manga@localhost:5432/mangasearch?sslmode=disable")
+	if err != nil {
+		log.Fatal("postgres connect failed:", err)
 	}
-	
-	q.Start(paths)
+	defer database.Close()
+	fmt.Println("postgres connected ✓")
+
+	if err := database.InitSchema(); err != nil {
+		log.Fatal("schema init failed:", err)
+	}
+	fmt.Println("schema ready ✓")
+
+	esClient, err := search.New("http://localhost:9200")
+	if err != nil {
+		log.Fatal("elasticsearch connect failed:", err)
+	}
+	fmt.Println("elasticsearch connected ✓")
+
+	if err := esClient.InitIndex(ctx); err != nil {
+		log.Fatal("elasticsearch index init failed:", err)
+	}
+	fmt.Println("elasticsearch index ready ✓")
+
+	q := queue.NewRedisQueue(4, database, esClient)
+
+	results, err := esClient.Search(ctx, "burns")
+	if err != nil {
+		log.Fatal("search failed:", err)
+	}
+	for _, r := range results {
+		fmt.Printf("%s / %s / %s → %s\n", r.Series, r.Chapter, r.Page, r.Text)
+	}
 }
