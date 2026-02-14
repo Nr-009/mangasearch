@@ -94,35 +94,48 @@ WATCHER_INTERVAL=30m                    # how often the file watcher rescans
 **3. Build and run**
 
 ```bash
-go build -o mangasearch .
-./mangasearch start
+make start
 ```
 
-That's it. `mangasearch start` brings up all Docker services (PostgreSQL, Redis, Elasticsearch, OCR), runs the initial scan, and starts the API server and file watcher.
-
-To also bring Docker down on exit:
-
-```bash
-./mangasearch start --with-docker
-```
+That's it. `make start` builds the binary, brings up all Docker services (PostgreSQL, Redis, Elasticsearch, OCR), runs the initial scan, and starts the API server and file watcher. Leave this terminal running.
 
 ---
 
 ## Usage
 
+MangaSearch needs **two terminals** — one to run the server, one to send commands.
+
+**Terminal 1 — start the server (keep this running)**
+
 ```bash
-# Search for a quote
-./mangasearch search "I sacrifice"
-
-# Check how many pages are indexed and queue length
-./mangasearch status
-
-# Manually trigger a re-scan
-./mangasearch index
-
-# Wipe PostgreSQL + Elasticsearch and rebuild from scratch
-./mangasearch rebuild-index
+make start
 ```
+
+You will see the Docker services boot, the initial scan run, and the workers start processing pages. Leave this open.
+
+**Terminal 2 — search and manage**
+
+```bash
+# Search for a quote across your entire collection
+make search q="I sacrifice"
+
+# Check how many pages are indexed and current queue length
+make status
+
+# Wipe PostgreSQL + Elasticsearch and rebuild everything from scratch
+make rebuild
+```
+
+### Available Make commands
+
+| Command | What it does |
+|---|---|
+| `make build` | Compile the binary |
+| `make start` | Build + boot Docker + start server |
+| `make search q="..."` | Search for a quote |
+| `make status` | Show indexed page count and queue length |
+| `make rebuild` | Wipe and reindex everything from scratch |
+| `make clean` | Remove the compiled binary |
 
 ---
 
@@ -146,6 +159,7 @@ To also bring Docker down on exit:
 ```
 mangasearch/
   main.go                  ← entry point
+  Makefile                 ← build, start, search, status, rebuild, clean
   cmd/                     ← Cobra CLI commands (start, index, search, status, rebuild)
   internal/
     api/                   ← Gin server, handlers, middleware
