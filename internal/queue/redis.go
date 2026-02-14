@@ -3,11 +3,12 @@ package queue
 import (
 	"context"
 	"fmt"
-	"sync"
-	"time"
 	"mangasearch/internal/db"
 	"mangasearch/internal/ocr"
 	"mangasearch/internal/search"
+	"sync"
+	"time"
+
 	"github.com/redis/go-redis/v9"
 )
 
@@ -46,14 +47,6 @@ func (queue *RedisQueue) Push(dataPath string) error {
 	return queue.client.RPush(queue.ctx, queue.queueName, dataPath).Err()
 }
 
-func (queue *RedisQueue) IsEmpty() bool {
-	length, err := queue.client.LLen(queue.ctx, queue.queueName).Result()
-	if err != nil {
-		return false
-	}
-	return length == 0
-}
-
 func (queue *RedisQueue) QueueLength() (int, error) {
 	length, err := queue.client.LLen(queue.ctx, queue.queueName).Result()
 	if err != nil {
@@ -62,26 +55,29 @@ func (queue *RedisQueue) QueueLength() (int, error) {
 	return int(length), nil
 }
 
-func (queue *RedisQueue) worker(id int) {
+func (queue *RedisQueue) worker(id int, wg *sync.WaitGroup) {
+	defer wg.Done()
 	defer func() {
 		queue.mu.Lock()
 		queue.activeWorkers--
 		queue.mu.Unlock()
 	}()
 
-	result, err := queue.client.BRPop(queue.ctx, 5*time.Second, queue.queueName).Result()
-	if err == redis.Nil {
-		return
-	}
-	if err != nil {
-		fmt.Printf("[worker %d] error: %v\n", id, err)
-		return
-	}
+	for {
+		result, err := queue.client.BRPop(queue.ctx, 5*time.Second, queue.queueName).Result()
+		if err == redis.Nil {
+			return
+		}
+		if err != nil {
+			fmt.Printf("[worker %d] error: %v\n", id, err)
+			return
+		}
 
-	dataPath := result[1]
-	for idx := 0; idx < queue.retries; idx++ {
-		if process(dataPath, queue.db, queue.es, queue.ocr, id) == nil {
-			break
+		dataPath := result[1]
+		for idx := 0; idx < queue.retries; idx++ {
+			if process(dataPath, queue.db, queue.es, queue.ocr, id) == nil {
+				break
+			}
 		}
 	}
 }
@@ -93,22 +89,18 @@ func (queue *RedisQueue) Start(paths []string) {
 		}
 	}
 
-	for !queue.IsEmpty() {
-		for queue.getActiveWorkers() < queue.getMaxWorkers() {
-			queue.mu.Lock()
-			queue.activeWorkers++
-			queue.workerCounter++
-			id := queue.workerCounter
-			queue.mu.Unlock()
-			go queue.worker(id)
-		}
-		time.Sleep(100 * time.Millisecond)
+	var wg sync.WaitGroup
+	for i := 0; i < queue.getMaxWorkers(); i++ {
+		queue.mu.Lock()
+		queue.activeWorkers++
+		queue.workerCounter++
+		id := queue.workerCounter
+		queue.mu.Unlock()
+		wg.Add(1)
+		go queue.worker(id, &wg)
 	}
 
-	for queue.getActiveWorkers() > 0 {
-		time.Sleep(100 * time.Millisecond)
-	}
-
+	wg.Wait()
 	fmt.Println("all done")
 }
 
