@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"mangasearch/internal/db"
+	"mangasearch/internal/ocr"
 	"mangasearch/internal/search"
 
 	"github.com/redis/go-redis/v9"
@@ -18,18 +19,19 @@ type RedisQueue struct {
 	mu            *sync.Mutex
 	maxWorkers    int
 	activeWorkers int
+	workerCounter int
 	queueName     string
 	retries       int
 	db            *db.DB
 	es            *search.Client
+	ocr           *ocr.Client
 }
 
-func NewRedisQueue(workers int, database *db.DB, esClient *search.Client) *RedisQueue {
+func NewRedisQueue(workers int, redisAddr string, database *db.DB, esClient *search.Client, ocrClient *ocr.Client) *RedisQueue {
 	return &RedisQueue{
 		client: redis.NewClient(&redis.Options{
-			Addr:     "localhost:6379",
-			Password: "",
-			DB:       0,
+			Addr: redisAddr,
+			DB:   0,
 		}),
 		ctx:        context.Background(),
 		mu:         &sync.Mutex{},
@@ -38,6 +40,7 @@ func NewRedisQueue(workers int, database *db.DB, esClient *search.Client) *Redis
 		retries:    3,
 		db:         database,
 		es:         esClient,
+		ocr:        ocrClient,
 	}
 }
 
@@ -53,7 +56,7 @@ func (queue *RedisQueue) IsEmpty() bool {
 	return length == 0
 }
 
-func (queue *RedisQueue) worker() {
+func (queue *RedisQueue) worker(id int) {
 	defer func() {
 		queue.mu.Lock()
 		queue.activeWorkers--
@@ -65,13 +68,13 @@ func (queue *RedisQueue) worker() {
 		return
 	}
 	if err != nil {
-		fmt.Println("worker error:", err)
+		fmt.Printf("[worker %d] error: %v\n", id, err)
 		return
 	}
 
 	dataPath := result[1]
 	for idx := 0; idx < queue.retries; idx++ {
-		if process(dataPath, queue.db, queue.es) == nil {
+		if process(dataPath, queue.db, queue.es, queue.ocr, id) == nil {
 			break
 		}
 	}
@@ -85,12 +88,15 @@ func (queue *RedisQueue) Start(paths []string) {
 	}
 
 	for !queue.IsEmpty() {
-		if queue.getActiveWorkers() < queue.getMaxWorkers() {
-			queue.addWorker()
-			go queue.worker()
-		} else {
-			time.Sleep(100 * time.Millisecond)
+		for queue.getActiveWorkers() < queue.getMaxWorkers() {
+			queue.mu.Lock()
+			queue.activeWorkers++
+			queue.workerCounter++
+			id := queue.workerCounter
+			queue.mu.Unlock()
+			go queue.worker(id)
 		}
+		time.Sleep(100 * time.Millisecond)
 	}
 
 	for queue.getActiveWorkers() > 0 {
@@ -110,16 +116,4 @@ func (queue *RedisQueue) getMaxWorkers() int {
 	queue.mu.Lock()
 	defer queue.mu.Unlock()
 	return queue.maxWorkers
-}
-
-func (queue *RedisQueue) setMaxWorkers(workers int) {
-	queue.mu.Lock()
-	defer queue.mu.Unlock()
-	queue.maxWorkers = workers
-}
-
-func (queue *RedisQueue) addWorker() {
-	queue.mu.Lock()
-	queue.activeWorkers++
-	queue.mu.Unlock()
 }

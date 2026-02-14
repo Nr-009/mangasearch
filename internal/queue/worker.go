@@ -3,7 +3,6 @@ package queue
 import (
 	"context"
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 
@@ -23,33 +22,30 @@ func parsePath(path string) (series, chapter, page string, err error) {
 	return series, chapter, page, nil
 }
 
-func process(dataPath string, database *db.DB, esClient *search.Client) error {
-	pid := os.Getpid()
-
+func process(dataPath string, database *db.DB, esClient *search.Client, ocrClient *ocr.Client, id int) error {
 	series, chapter, page, err := parsePath(dataPath)
 	if err != nil {
 		return fmt.Errorf("parsePath: %w", err)
 	}
 
-	text, err := ocr.GetData(dataPath)
+	text, err := ocrClient.GetData(dataPath)
 	if err != nil {
-		fmt.Println("ocr error:", err)
+		fmt.Printf("[worker %d] ocr error: %v\n", id, err)
 		return err
 	}
 
-	fmt.Printf("[worker %d] OCR done — %s / %s / %s\n", pid, series, chapter, page)
+	fmt.Printf("[worker %d] OCR done — %s / %s / %s\n", id, series, chapter, page)
 
-	if err := database.SavePage(series, chapter, page, dataPath, text); err != nil {
+	if err := database.SavePage(context.Background(), series, chapter, page, dataPath, text); err != nil {
 		return fmt.Errorf("SavePage: %w", err)
 	}
 
-	fmt.Printf("[worker %d] ✓ saved %s / %s / %s\n", pid, series, chapter, page)
+	fmt.Printf("[worker %d] ✓ saved %s / %s / %s\n", id, series, chapter, page)
 
 	if err := esClient.IndexPage(context.Background(), series, chapter, page, dataPath, text); err != nil {
 		return fmt.Errorf("IndexPage: %w", err)
 	}
 
-	fmt.Printf("[worker %d] ✓ indexed %s / %s / %s\n", pid, series, chapter, page)
-
+	fmt.Printf("[worker %d] ✓ indexed %s / %s / %s\n", id, series, chapter, page)
 	return nil
 }

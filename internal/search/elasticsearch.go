@@ -10,7 +10,6 @@ import (
 )
 
 const indexName = "manga_pages"
-
 const mapping = `{
   "mappings": {
     "properties": {
@@ -44,7 +43,6 @@ func (c *Client) InitIndex(ctx context.Context) error {
 		return fmt.Errorf("InitIndex exists check: %w", err)
 	}
 	defer res.Body.Close()
-
 	if res.StatusCode == 200 {
 		return nil
 	}
@@ -58,7 +56,6 @@ func (c *Client) InitIndex(ctx context.Context) error {
 		return fmt.Errorf("InitIndex create: %w", err)
 	}
 	defer res.Body.Close()
-
 	if res.IsError() {
 		return fmt.Errorf("InitIndex create response: %s", res.String())
 	}
@@ -73,7 +70,6 @@ func (c *Client) IndexPage(ctx context.Context, series, chapter, page, path, tex
 		"path":    path,
 		"text":    text,
 	}
-
 	body, err := json.Marshal(doc)
 	if err != nil {
 		return fmt.Errorf("IndexPage marshal: %w", err)
@@ -88,7 +84,6 @@ func (c *Client) IndexPage(ctx context.Context, series, chapter, page, path, tex
 		return fmt.Errorf("IndexPage index: %w", err)
 	}
 	defer res.Body.Close()
-
 	if res.IsError() {
 		return fmt.Errorf("IndexPage response: %s", res.String())
 	}
@@ -124,7 +119,6 @@ func (c *Client) Search(ctx context.Context, query string) ([]SearchResult, erro
 		return nil, fmt.Errorf("Search request: %w", err)
 	}
 	defer res.Body.Close()
-
 	if res.IsError() {
 		return nil, fmt.Errorf("Search response: %s", res.String())
 	}
@@ -136,7 +130,6 @@ func (c *Client) Search(ctx context.Context, query string) ([]SearchResult, erro
 			} `json:"hits"`
 		} `json:"hits"`
 	}
-
 	if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
 		return nil, fmt.Errorf("Search decode: %w", err)
 	}
@@ -145,6 +138,5 @@ func (c *Client) Search(ctx context.Context, query string) ([]SearchResult, erro
 	for _, hit := range response.Hits.Hits {
 		results = append(results, hit.Source)
 	}
-
 	return results, nil
 }
