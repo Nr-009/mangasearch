@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
-
 	"mangasearch/internal/db"
 )
 

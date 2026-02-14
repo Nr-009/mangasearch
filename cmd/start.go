@@ -10,7 +10,6 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
-
 	"mangasearch/internal/api"
 	"mangasearch/internal/db"
 	"mangasearch/internal/ocr"
@@ -18,7 +17,6 @@ import (
 	"mangasearch/internal/search"
 	"mangasearch/internal/startup"
 	"mangasearch/internal/watcher"
-
 	"github.com/spf13/cobra"
 )
 

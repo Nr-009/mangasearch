@@ -2,9 +2,7 @@ package cmd
 
 import (
 	"os"
-
 	"mangasearch/internal/config"
-
 	"github.com/spf13/cobra"
 )
 

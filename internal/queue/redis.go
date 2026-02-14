@@ -5,11 +5,9 @@ import (
 	"fmt"
 	"sync"
 	"time"
-
 	"mangasearch/internal/db"
 	"mangasearch/internal/ocr"
 	"mangasearch/internal/search"
-
 	"github.com/redis/go-redis/v9"
 )
 

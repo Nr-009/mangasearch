@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"time"
-
 	"mangasearch/internal/config"
 )
 

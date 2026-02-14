@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
-
 	"mangasearch/internal/db"
 	"mangasearch/internal/ocr"
 	"mangasearch/internal/search"

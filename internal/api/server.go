@@ -6,14 +6,12 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
-
 	"mangasearch/internal/config"
 	"mangasearch/internal/db"
 	"mangasearch/internal/ocr"
 	"mangasearch/internal/queue"
 	"mangasearch/internal/search"
 	"mangasearch/internal/watcher"
-
 	"github.com/gin-gonic/gin"
 )
 

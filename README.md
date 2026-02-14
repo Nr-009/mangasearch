@@ -1,39 +1,162 @@
 # MangaSearch
 
-A local CLI tool that indexes your manga collection and lets you search for quotes across it.
+A local manga quote search engine built in Go and Python. Point it at your manga folder, it OCRs every page in the background, and lets you search across your entire collection — `"I sacrifice"` returns `Berserk Chapter 78, Page 13` in milliseconds.
 
+No cloud. No subscriptions. Runs entirely on your machine.
+
+---
+
+## How It Works
+
+Running `mangasearch start` boots a single Go process that owns the entire pipeline:
+
+**File Watcher** walks your manga folder on startup and every 30 minutes. It builds a `map[path]modifiedTime`, diffs it against the last snapshot in PostgreSQL, and pushes only new or changed image paths into the Redis queue. Nothing gets re-processed unnecessarily.
+
+**Go Workers** run inside the same process, each in its own goroutine. They pop image paths from Redis using `BRPOP`, parse the path to extract series/chapter/page, POST to the Python OCR service, get the extracted text back, and then save it themselves — writing to PostgreSQL and indexing into Elasticsearch.
+
+**Python OCR Service** is a containerized FastAPI service backed by EasyOCR. It receives an image path, runs OCR, and returns the extracted text. That's all it does — storage is handled entirely by the Go workers.
+
+**Gin REST API** runs inside the same Go process as the watcher and workers. It handles search queries by hitting Elasticsearch, exposes indexing status from PostgreSQL and Redis, and triggers rebuilds when asked.
+
+**Cobra CLI** commands (`search`, `status`, `rebuild-index`) talk directly to the Gin API over HTTP. They don't boot anything — the server has to be running separately via `mangasearch start`.
+
+```mermaid
+flowchart TD
+    CLI["Cobra CLI\nmangasearch search / status / rebuild-index"]
+    CLI -->|HTTP port 8080| GIN
+
+    subgraph GO["mangasearch start (Go)"]
+        direction TB
+        WATCHER["File Watcher\nHashMap diff"]
+        QUEUE["Redis Queue"]
+        WORKERS["Go Workers\ngoroutines"]
+        GIN["Gin REST API\nGET /search · GET /status · POST /rebuild"]
+
+        WATCHER -->|image paths| QUEUE
+        QUEUE -->|BRPOP| WORKERS
+    end
+
+    OCR["Python OCR Service\nFastAPI + EasyOCR\n(Docker)"]
+    PG[("PostgreSQL\nsource of truth\n(Docker)")]
+    ES[("Elasticsearch\nfuzzy search\n(Docker)")]
+
+    WORKERS -->|HTTP POST /ocr| OCR
+    OCR -->|extracted text| WORKERS
+
+    WORKERS -->|save| PG
+    WORKERS -->|index| ES
+
+    GIN -->|read| PG
+    GIN -->|search| ES
 ```
-mangasearch index /manga/Berserk
-mangasearch search "I sacrifice"
-→ Berserk Chapter 57, Page 14: "I sacrifice all of you..."
-```
 
-## Stack
+---
 
-| Layer           | Tech                         |
-| --------------- | ---------------------------- |
-| App             | Go + Cobra + Gin             |
-| OCR             | Python + FastAPI + Tesseract |
-| Queue           | Redis                        |
-| Source of truth | PostgreSQL                   |
-| Search          | Elasticsearch                |
-| Infrastructure  | Docker Compose               |
+## Requirements
 
-## Quick Start
+- Go 1.21+
+- Docker + Docker Compose
+
+---
+
+## Setup
+
+**1. Clone the repo**
 
 ```bash
-# 1. Start infrastructure
-docker compose up -d
-
-# 2. Start OCR server
-cd python
-pip install -r requirements.txt
-uvicorn ocr_server:app --workers 4 --port 5000
-
-# 3. Run the CLI (coming soon)
-go run main.go index /path/to/manga
+git clone https://github.com/Nr-009/mangasearch
+cd mangasearch
+go mod download
 ```
 
-## Architecture
+**2. Configure your environment**
 
-See `ARCHITECTURE.md` for full data flow diagrams and design decisions.
+Copy `.env.example` to `.env` and set your manga folder path:
+
+```env
+POSTGRES_USER=manga
+POSTGRES_PASSWORD=manga
+POSTGRES_DB=mangasearch
+POSTGRES_PORT=5432
+
+REDIS_PORT=6379
+ES_PORT=9200
+OCR_PORT=5001
+API_PORT=8080
+
+MANGA_FOLDER=/path/to/your/manga        # absolute path on your host machine
+MANGA_FOLDER_CONTAINER=/manga           # where it's mounted inside Docker (leave as-is)
+
+WORKERS=4                               # number of OCR workers (CPU cores - 1 recommended)
+WATCHER_INTERVAL=30m                    # how often the file watcher rescans
+```
+
+**3. Build and run**
+
+```bash
+go build -o mangasearch .
+./mangasearch start
+```
+
+That's it. `mangasearch start` brings up all Docker services (PostgreSQL, Redis, Elasticsearch, OCR), runs the initial scan, and starts the API server and file watcher.
+
+To also bring Docker down on exit:
+
+```bash
+./mangasearch start --with-docker
+```
+
+---
+
+## Usage
+
+```bash
+# Search for a quote
+./mangasearch search "I sacrifice"
+
+# Check how many pages are indexed and queue length
+./mangasearch status
+
+# Manually trigger a re-scan
+./mangasearch index
+
+# Wipe PostgreSQL + Elasticsearch and rebuild from scratch
+./mangasearch rebuild-index
+```
+
+---
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Main app | Go |
+| OCR service | Python, FastAPI, EasyOCR |
+| Job queue | Redis |
+| Source of truth | PostgreSQL |
+| Search | Elasticsearch |
+| CLI | Cobra |
+| API | Gin |
+| Infrastructure | Docker Compose |
+
+---
+
+## Project Structure
+
+```
+mangasearch/
+  main.go                  ← entry point
+  cmd/                     ← Cobra CLI commands (start, index, search, status, rebuild)
+  internal/
+    api/                   ← Gin server, handlers, middleware
+    config/                ← .env loading
+    db/                    ← PostgreSQL connection and queries
+    ocr/                   ← HTTP client for OCR service
+    queue/                 ← Redis queue and workers
+    search/                ← Elasticsearch indexing and search
+    startup/               ← Docker health checks
+    watcher/               ← filesystem walker and HashMap diff
+  python/
+    ocr_server.py          ← FastAPI OCR endpoint
+    Dockerfile
+```
