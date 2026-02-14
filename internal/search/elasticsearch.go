@@ -62,6 +62,18 @@ func (c *Client) InitIndex(ctx context.Context) error {
 	return nil
 }
 
+func (c *Client) DeleteIndex(ctx context.Context) error {
+	res, err := c.es.Indices.Delete([]string{indexName}, c.es.Indices.Delete.WithContext(ctx))
+	if err != nil {
+		return fmt.Errorf("DeleteIndex: %w", err)
+	}
+	defer res.Body.Close()
+	if res.IsError() && res.StatusCode != 404 {
+		return fmt.Errorf("DeleteIndex response: %s", res.String())
+	}
+	return nil
+}
+
 func (c *Client) IndexPage(ctx context.Context, series, chapter, page, path, text string) error {
 	doc := map[string]string{
 		"series":  series,

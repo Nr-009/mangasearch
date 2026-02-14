@@ -41,15 +41,12 @@ func (w *Watcher) updateFiles() {
 	var traverse func(dir string)
 	traverse = func(dir string) {
 		defer wg.Done()
-
 		entries, err := os.ReadDir(dir)
 		if err != nil {
 			return
 		}
-
 		for _, entry := range entries {
 			fullPath := filepath.Join(dir, entry.Name())
-
 			if entry.IsDir() {
 				wg.Add(1)
 				go traverse(fullPath)
@@ -65,7 +62,6 @@ func (w *Watcher) updateFiles() {
 
 	wg.Add(1)
 	go traverse(w.mainFolder)
-
 	go func() {
 		wg.Wait()
 		close(results)
@@ -107,11 +103,6 @@ func (w *Watcher) Start(ctx context.Context, database *db.DB, interval time.Dura
 	go func() {
 		ticker := time.NewTicker(interval)
 		defer ticker.Stop()
-
-		toIndex, toDelete, err := w.Compare(ctx, database)
-		if err == nil {
-			onCompare(toIndex, toDelete)
-		}
 
 		for {
 			select {

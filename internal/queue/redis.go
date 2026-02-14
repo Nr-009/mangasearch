@@ -56,6 +56,14 @@ func (queue *RedisQueue) IsEmpty() bool {
 	return length == 0
 }
 
+func (queue *RedisQueue) QueueLength() (int, error) {
+	length, err := queue.client.LLen(queue.ctx, queue.queueName).Result()
+	if err != nil {
+		return 0, err
+	}
+	return int(length), nil
+}
+
 func (queue *RedisQueue) worker(id int) {
 	defer func() {
 		queue.mu.Lock()

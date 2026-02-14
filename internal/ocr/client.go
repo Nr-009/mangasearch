@@ -37,7 +37,6 @@ func (c *Client) translatePath(path string) string {
 
 func (c *Client) GetData(pathName string) (string, error) {
 	containerPath := c.translatePath(pathName)
-
 	data, err := json.Marshal(request{Path: containerPath})
 	if err != nil {
 		return "", err
@@ -58,6 +57,5 @@ func (c *Client) GetData(pathName string) (string, error) {
 	if err := json.Unmarshal(body, &result); err != nil {
 		return "", fmt.Errorf("failed to parse response: %w", err)
 	}
-
 	return result.Text, nil
 }

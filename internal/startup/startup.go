@@ -15,23 +15,18 @@ func Boot(ctx context.Context, cfg *config.Config) error {
 	if err := startDocker(); err != nil {
 		return fmt.Errorf("docker compose: %w", err)
 	}
-
 	if err := waitForPostgres(ctx, cfg); err != nil {
 		return fmt.Errorf("postgres not ready: %w", err)
 	}
-
 	if err := waitForRedis(ctx, cfg); err != nil {
 		return fmt.Errorf("redis not ready: %w", err)
 	}
-
 	if err := waitForElasticsearch(ctx, cfg); err != nil {
 		return fmt.Errorf("elasticsearch not ready: %w", err)
 	}
-
 	if err := waitForOCRServer(ctx, cfg); err != nil {
 		return fmt.Errorf("ocr server not ready: %w", err)
 	}
-
 	return nil
 }
 
@@ -80,7 +75,6 @@ func waitForElasticsearch(ctx context.Context, cfg *config.Config) error {
 func waitForOCRServer(ctx context.Context, cfg *config.Config) error {
 	fmt.Println("waiting for ocr server...")
 	url := fmt.Sprintf("http://localhost:%d/health", cfg.OCRPort)
-
 	if err := retry(ctx, 60, 3*time.Second, func() error {
 		resp, err := http.Get(url)
 		if err != nil {
@@ -91,8 +85,7 @@ func waitForOCRServer(ctx context.Context, cfg *config.Config) error {
 	}); err != nil {
 		return err
 	}
-
-	fmt.Println("ocr server up — waiting for all workers to stabilize...")
+	fmt.Println("ocr server up — waiting for workers to stabilize...")
 	time.Sleep(time.Duration(cfg.Workers) * 3 * time.Second)
 	return nil
 }

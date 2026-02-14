@@ -42,3 +42,17 @@ func (db *DB) DeletePage(ctx context.Context, path string) error {
 	_, err := db.Conn.ExecContext(ctx, `DELETE FROM pages WHERE path = $1`, path)
 	return err
 }
+
+func (db *DB) DeleteAllPages(ctx context.Context) error {
+	_, err := db.Conn.ExecContext(ctx, `DELETE FROM pages`)
+	return err
+}
+
+func (db *DB) CountPages(ctx context.Context) (int, error) {
+	var count int
+	row := db.Conn.QueryRowContext(ctx, `SELECT COUNT(*) FROM pages`)
+	if err := row.Scan(&count); err != nil {
+		return 0, err
+	}
+	return count, nil
+}

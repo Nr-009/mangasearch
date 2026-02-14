@@ -15,6 +15,7 @@ type Config struct {
 	Workers              int
 	OCRPort              int
 	ESPort               int
+	APIPort              int
 	PostgresDSN          string
 	RedisAddr            string
 	WatcherInterval      time.Duration
@@ -26,16 +27,13 @@ func Load(envPath string) (*Config, error) {
 	}
 
 	cfg := &Config{}
-
 	cfg.MangaFolder = os.Getenv("MANGA_FOLDER")
 	cfg.MangaFolderContainer = os.Getenv("MANGA_FOLDER_CONTAINER")
-
 	if cfg.MangaFolder == "" {
 		return nil, fmt.Errorf("MANGA_FOLDER is required in .env")
 	}
 
 	var err error
-
 	cfg.Workers, err = parseInt("WORKERS", 1)
 	if err != nil {
 		return nil, err
@@ -51,11 +49,15 @@ func Load(envPath string) (*Config, error) {
 		return nil, err
 	}
 
-	postgresPort, err := parseInt("POSTGRES_PORT", 5432)
+	cfg.APIPort, err = parseInt("API_PORT", 8080)
 	if err != nil {
 		return nil, err
 	}
 
+	postgresPort, err := parseInt("POSTGRES_PORT", 5432)
+	if err != nil {
+		return nil, err
+	}
 	cfg.PostgresDSN = fmt.Sprintf("postgres://%s:%s@localhost:%d/%s?sslmode=disable",
 		os.Getenv("POSTGRES_USER"),
 		os.Getenv("POSTGRES_PASSWORD"),

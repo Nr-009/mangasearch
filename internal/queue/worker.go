@@ -33,19 +33,17 @@ func process(dataPath string, database *db.DB, esClient *search.Client, ocrClien
 		fmt.Printf("[worker %d] ocr error: %v\n", id, err)
 		return err
 	}
-
 	fmt.Printf("[worker %d] OCR done — %s / %s / %s\n", id, series, chapter, page)
 
 	if err := database.SavePage(context.Background(), series, chapter, page, dataPath, text); err != nil {
 		return fmt.Errorf("SavePage: %w", err)
 	}
-
 	fmt.Printf("[worker %d] ✓ saved %s / %s / %s\n", id, series, chapter, page)
 
 	if err := esClient.IndexPage(context.Background(), series, chapter, page, dataPath, text); err != nil {
 		return fmt.Errorf("IndexPage: %w", err)
 	}
-
 	fmt.Printf("[worker %d] ✓ indexed %s / %s / %s\n", id, series, chapter, page)
+
 	return nil
 }

@@ -3,6 +3,7 @@ package db
 import (
 	"database/sql"
 	"fmt"
+
 	_ "github.com/lib/pq"
 )
 
@@ -15,11 +16,9 @@ func New(dsn string) (*DB, error) {
 	if err != nil {
 		return nil, fmt.Errorf("db.New: %w", err)
 	}
-
 	if err := conn.Ping(); err != nil {
 		return nil, fmt.Errorf("db.New ping: %w", err)
 	}
-
 	return &DB{Conn: conn}, nil
 }
 
