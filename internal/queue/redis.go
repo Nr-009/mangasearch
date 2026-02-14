@@ -123,3 +123,19 @@ func (queue *RedisQueue) getMaxWorkers() int {
 	defer queue.mu.Unlock()
 	return queue.maxWorkers
 }
+func (queue *RedisQueue) CacheGet(query string) (string, bool) {
+	key := "cache:" + query
+	val, err := queue.client.Get(queue.ctx, key).Result()
+	if err == redis.Nil {
+		return "", false
+	}
+	if err != nil {
+		return "", false
+	}
+	return val, true
+}
+
+func (queue *RedisQueue) CacheSet(query string, value string) {
+	key := "cache:" + query
+	queue.client.Set(queue.ctx, key, value, 5*time.Minute)
+}

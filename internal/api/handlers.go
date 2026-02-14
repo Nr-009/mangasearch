@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
+
 	"github.com/gin-gonic/gin"
 )
 
@@ -13,10 +15,19 @@ func (s *Server) HandleSearch(c *gin.Context) {
 		return
 	}
 
+	if cached, ok := s.redis.CacheGet(q); ok {
+		c.Data(http.StatusOK, "application/json", []byte(cached))
+		return
+	}
+
 	results, err := s.es.Search(context.Background(), q)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
+	}
+
+	if encoded, err := json.Marshal(results); err == nil {
+		s.redis.CacheSet(q, string(encoded))
 	}
 
 	c.JSON(http.StatusOK, results)
